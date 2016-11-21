@@ -43,12 +43,12 @@ class FasterRCNN(chainer.Chain):
 
     def __call__(self, x, im_info, gt_boxes=None):
         h = self.trunk(x)
-        if isinstance(im_info, chainer.cuda.cupy.ndarray):
+        if isinstance(im_info, chainer.cuda.ndarray):
             im_info = chainer.cuda.cupy.asnumpy(im_info)
         if self.train:
             im_info = im_info.data
             gt_boxes = gt_boxes.data
-            if isinstance(gt_boxes, chainer.cuda.cupy.ndarray):
+            if isinstance(gt_boxes, chainer.cuda.ndarray):
                 im_info = chainer.cuda.cupy.asnumpy(im_info)
                 gt_boxes = chainer.cuda.cupy.asnumpy(gt_boxes)
             rpn_cls_loss, rpn_loss_bbox, rois = self.RPN(

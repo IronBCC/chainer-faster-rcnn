@@ -10,6 +10,7 @@ import argparse
 import chainer
 import cv2 as cv
 import numpy as np
+import time
 
 CLASSES = ('__background__',
            'aeroplane', 'bicycle', 'bird', 'boat',
@@ -21,10 +22,11 @@ PIXEL_MEANS = np.array([[[102.9801, 115.9465, 122.7717]]])
 
 
 def get_model(gpu):
+    print "Model loading..."
     model = FasterRCNN(gpu)
     model.train = False
     serializers.load_npz('data/VGG16_faster_rcnn_final.model', model)
-
+    print "Model loaded."
     return model
 
 
@@ -79,19 +81,49 @@ if __name__ == '__main__':
     if chainer.cuda.available and args.gpu >= 0:
         model.to_gpu(args.gpu)
 
-    orig_image = cv.imread(args.img_fn)
-    img, im_scale = img_preprocessing(orig_image, PIXEL_MEANS)
-    img = np.expand_dims(img, axis=0)
-    if args.gpu >= 0:
-        img = to_gpu(img, device=args.gpu)
-    img = chainer.Variable(img, volatile=True)
-    h, w = img.data.shape[2:]
-    cls_score, bbox_pred = model(img, np.array([[h, w, im_scale]]))
-    cls_score = cls_score.data
 
-    if args.gpu >= 0:
-        cls_score = chainer.cuda.cupy.asnumpy(cls_score)
-        bbox_pred = chainer.cuda.cupy.asnumpy(bbox_pred)
-    result = draw_result(orig_image, im_scale, cls_score, bbox_pred,
-                         args.nms_thresh, args.conf)
-    cv.imwrite(args.out_fn, result)
+    cap = cv.VideoCapture(0)
+
+    while (True):
+        # Capture frame-by-frame
+        ret, frame = cap.read()
+
+        # Our operations on the frame come here
+        # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+
+        orig_image = frame
+        start = time.clock()
+        img, im_scale = img_preprocessing(orig_image, PIXEL_MEANS)
+        print "img_preprocessing = ", (time.clock() - start)
+
+        start = time.clock()
+        img = np.expand_dims(img, axis=0)
+        if args.gpu >= 0:
+            img = to_gpu(img, device=args.gpu)
+        img = chainer.Variable(img, volatile=True)
+        h, w = img.data.shape[2:]
+        print "variable = ", (time.clock() - start)
+
+
+        start = time.clock()
+        cls_score, bbox_pred = model(img, np.array([[h, w, im_scale]]))
+        cls_score = cls_score.data
+        print "recognition = ", (time.clock() - start)
+
+        if args.gpu >= 0:
+            cls_score = chainer.cuda.cupy.asnumpy(cls_score)
+            bbox_pred = chainer.cuda.cupy.asnumpy(bbox_pred)
+        result = draw_result(orig_image, im_scale, cls_score, bbox_pred,
+                             args.nms_thresh, args.conf)
+        # print('%d (%d) found' % (len(found_filtered), len(found)))
+        cv.imshow('frame', result)
+
+        # Display the resulting frame
+        # cv2.imshow('frame', gray)
+        if cv.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    # When everything done, release the capture
+    cap.release()
+    cv.destroyAllWindows()
